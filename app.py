@@ -4,31 +4,33 @@ st.set_page_config(page_title="Температурни Ефекти", page_icon
 
 st.title("🌡️ AI Температурен асистент")
 
-# 1. Превключване между Целзий и Фаренхайт
+# 1. Избор на мерна единица
 unit = st.radio("Избери мерна единица:", ["Целзий (°C)", "Фаренхайт (°F)"], horizontal=True)
 
-# Конфигуриране на границите и стойностите по подразбиране спрямо мерната единица
+# Защита при смяна на единиците чрез уникален ключ (key)
 if unit == "Целзий (°C)":
     min_temp, max_temp, default_temp = -50, 60, 20
     label = "Въведи температурата в °C:"
+    input_key = "celsius_input"
 else:
     min_temp, max_temp, default_temp = -58, 140, 68
     label = "Въведи температурата в °F:"
+    input_key = "fahrenheit_input"
 
 # Поле за въвеждане на температура
-input_temp = st.number_input(label, min_value=min_temp, max_value=max_temp, value=default_temp)
+input_temp = st.number_input(label, min_value=min_temp, max_value=max_temp, value=default_temp, key=input_key)
 
-# Превръщане на стойността винаги в Целзий за вътрешната логика на анимациите и скалата
+# Превръщане на стойността в Целзий за логиката на анимацията
 if unit == "Фаренхайт (°F)":
     temp_in_celsius = (input_temp - 32) * 5 / 9
 else:
     temp_in_celsius = input_temp
 
-# 2. Изчисляване на процента за запълване на термометъра (базирано на скалата по Целзий -50 до +60)
+# 2. Изчисляване на процента за термометъра
 percentage = ((temp_in_celsius - (-50)) / (60 - (-50))) * 100
 percentage = max(0, min(100, percentage))
 
-# 3. Конфигурация на ефектите и съветите спрямо Целзий
+# 3. Конфигурация на ефектите и съветите
 if temp_in_celsius < 10:
     st.info(f"❄️ Студено е! Облечи топло яке. ({input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'})")
     bg_gradient = "linear-gradient(135deg, #1e3a8a, #3b82f6)"
@@ -58,7 +60,7 @@ else:
     speed = "4s"
     direction = "reverse"
 
-# Генериране на динамични текстове за деленията на скалата спрямо избраната единица
+# Динамична скала
 if unit == "Целзий (°C)":
     ticks = ["60°C", "40°C", "20°C", "0°C", "-20°C", "-40°C"]
 else:
@@ -66,31 +68,25 @@ else:
 
 ticks_html = "".join([f'<div style="height: 40px; display: flex; align-items: center; color: white; font-size: 12px; font-weight: bold;">— {t}</div>' for t in ticks])
 
-# 4. Визуализация на графичния термометър със СКАЛА
+# 4. Рендериране на термометъра
 st.markdown(f"""
 <div style="display: flex; flex-direction: column; align-items: center; margin: 30px 0; background: rgba(255,255,255,0.1); padding: 25px; border-radius: 15px; backdrop-filter: blur(5px); box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2);">
     <h3 style="color: white; margin-bottom: 20px;">Графичен Термометър със Скала</h3>
-    
     <div style="display: flex; align-items: flex-start; justify-content: center; width: 150px; height: 260px; position: relative;">
-        <!-- Стъклено тяло на термометъра -->
         <div style="width: 35px; height: 250px; background: #e2e8f0; border-radius: 20px; border: 4px solid #cbd5e1; position: relative; overflow: hidden; display: flex; align-items: flex-end; z-index: 2;">
-            <!-- Течност -->
             <div style="width: 100%; height: {percentage}%; background: {thermometer_color}; transition: height 0.6s cubic-bezier(0.1, 0.8, 0.3, 1); border-radius: 0 0 12px 12px;"></div>
         </div>
-        
-        <!-- Разчертана скала отстрани -->
         <div style="display: flex; flex-direction: column; justify-content: space-between; height: 240px; margin-left: 10px; padding-top: 5px; z-index: 2;">
             {ticks_html}
         </div>
     </div>
-    
     <div style="color: white; font-size: 28px; font-weight: bold; margin-top: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.4);">
         {input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'}
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# 5. Глобален CSS за фон и летящи емоджита
+# 5. Глобален CSS (Обърнете внимание на дублираните скоби {{ }})
 st.markdown(f"""
 <style>
     .stApp {{
