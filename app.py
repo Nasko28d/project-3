@@ -10,15 +10,22 @@ unit = st.radio("Избери мерна единица:", ["Целзий (°C)"
 # Защита при смяна на единиците чрез уникален ключ (key)
 if unit == "Целзий (°C)":
     min_temp, max_temp, default_temp = -50, 60, 20
-    label = "Въведи температурата в °C:"
-    input_key = "celsius_input"
+    label = "Настройте температурата в °C:"
+    input_key = "celsius_slider"
 else:
     min_temp, max_temp, default_temp = -58, 140, 68
-    label = "Въведи температурата в °F:"
-    input_key = "fahrenheit_input"
+    label = "Настройте температурата в °F:"
+    input_key = "fahrenheit_slider"
 
-# Поле за въвеждане на температура
-input_temp = st.number_input(label, min_value=min_temp, max_value=max_temp, value=default_temp, key=input_key)
+# Използваме st.slider вместо st.number_input за максимално улеснено въвеждане
+input_temp = st.slider(
+    label, 
+    min_value=float(min_temp), 
+    max_value=float(max_temp), 
+    value=float(default_temp), 
+    step=0.5,
+    key=input_key
+)
 
 # Превръщане на стойността в Целзий за логиката на анимацията
 if unit == "Фаренхайт (°F)":
@@ -86,7 +93,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 5. Глобален CSS (Обърнете внимание на дублираните скоби {{ }})
+# 5. Глобален CSS
 st.markdown(f"""
 <style>
     .stApp {{
