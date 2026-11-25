@@ -1,181 +1,158 @@
-import os
-import shutil
-import time
-from pathlib import Path
-
 import streamlit as st
-import yt_dlp
 
-st.set_page_config(page_title='YouTube Конвертор', page_icon='🎬', layout='centered')
+st.set_page_config(page_title="Температурни Ефекти", page_icon="🌡️", layout="centered")
 
-st.markdown(
-    """
-    <style>
-    .block-container {max-width: 760px; padding-top: 2rem;}
-    .stButton>button {width: 100%; border-radius: 10px; font-weight: 600;}
-    .title {font-size: 2.2rem; font-weight: 800; margin-bottom: 0;}
-    .sub {color: #888; margin-top: 0;}
-    </style>
-    """,
-    unsafe_allow_html=True,
+st.title("🌡️ AI Температурен асистент")
+
+# 1. Избор на мерна единица
+unit = st.radio("Избери мерна единица:", ["Целзий (°C)", "Фаренхайт (°F)"], horizontal=True)
+
+# Защита при смяна на единиците чрез уникален ключ (key)
+if unit == "Целзий (°C)":
+    min_temp, max_temp, default_temp = -50, 60, 20
+    label = "Настройте температурата в °C:"
+    input_key = "celsius_slider"
+else:
+    min_temp, max_temp, default_temp = -58, 140, 68
+    label = "Настройте температурата в °F:"
+    input_key = "fahrenheit_slider"
+
+# Използваме st.slider вместо st.number_input за максимално улеснено въвеждане
+input_temp = st.slider(
+    label, 
+    min_value=float(min_temp), 
+    max_value=float(max_temp), 
+    value=float(default_temp), 
+    step=0.5,
+    key=input_key
 )
 
-st.markdown('<p class="title">🎬 YouTube Конвертор</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub">Свали видео (MP4) или аудио (MP3) с един клик.</p>',
-            unsafe_allow_html=True)
+# Превръщане на стойността в Целзий за логиката на анимацията
+if unit == "Фаренхайт (°F)":
+    temp_in_celsius = (input_temp - 32) * 5 / 9
+else:
+    temp_in_celsius = input_temp
 
-DEFAULT_DIR = str(Path.home() / 'Downloads' / 'YouTube Конвертор')
-CLIENT_SETS = [None, ['tv'], ['web_safari'], ['mweb'], ['android_vr']]
+# 2. Изчисляване на процента за термометъра
+percentage = ((temp_in_celsius - (-50)) / (60 - (-50))) * 100
+percentage = max(0, min(100, percentage))
 
-if 'history' not in st.session_state:
-    st.session_state.history = []
+# 3. Конфигурация на ефектите и съветите
+if temp_in_celsius < 10:
+    st.info(f"❄️ Студено е! Облечи топло яке. ({input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'})")
+    bg_gradient = "linear-gradient(135deg, #1e3a8a, #3b82f6)"
+    thermometer_color = "#3b82f6"
+    emoji = "❄️"
+    speed = "10s"
+    direction = "normal"
+elif temp_in_celsius < 20:
+    st.warning(f"🍃 Прохладно е. Подходящо е леко яке. ({input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'})")
+    bg_gradient = "linear-gradient(135deg, #2d3748, #4a5568)"
+    thermometer_color = "#94a3b8"
+    emoji = "🍃"
+    speed = "7s" 
+    direction = "normal"
+elif temp_in_celsius < 35:
+    st.success(f"☀️ Приятно топло е! ({input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'})")
+    bg_gradient = "linear-gradient(135deg, #15803d, #22c55e)"
+    thermometer_color = "#22c55e"
+    emoji = "☀️"
+    speed = "12s" 
+    direction = "normal"
+else:
+    st.error(f"🔥 Много е горещо! Пий повече вода. ({input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'})")
+    bg_gradient = "linear-gradient(135deg, #7f1d1d, #ef4444)"
+    thermometer_color = "#ef4444"
+    emoji = "🔥"
+    speed = "4s"
+    direction = "reverse"
 
-# ---------- Вход ----------
-urls_text = st.text_area(
-    'Линк(ове) към YouTube',
-    placeholder='https://www.youtube.com/watch?v=...\n(по един линк на ред)',
-    height=100,
-)
+# Динамична скала
+if unit == "Целзий (°C)":
+    ticks = ["60°C", "40°C", "20°C", "0°C", "-20°C", "-40°C"]
+else:
+    ticks = ["140°F", "104°F", "68°F", "32°F", "-4°F", "-40°F"]
 
-col1, col2 = st.columns(2)
-with col1:
-    fmt = st.radio('Формат', ['🎵 MP3 (аудио)', '🎥 MP4 (видео)'], horizontal=True)
-is_audio = fmt.startswith('🎵')
-with col2:
-    if is_audio:
-        quality = st.select_slider('Качество на звука (kbps)',
-                                   options=[128, 192, 256, 320], value=192)
-    else:
-        quality = st.select_slider('Макс. резолюция',
-                                   options=[360, 480, 720, 1080, 1440, 2160],
-                                   value=1080)
+ticks_html = "".join([f'<div style="height: 40px; display: flex; align-items: center; color: white; font-size: 12px; font-weight: bold;">— {t}</div>' for t in ticks])
 
-with st.expander('⚙️ Настройки'):
-    out_dir = st.text_input('Папка за запис', DEFAULT_DIR)
-    cookie_source = st.selectbox(
-        'Cookies от браузър (помага срещу блокиране)',
-        ['Edge', 'Chrome', 'Firefox', 'Файл cookies.txt', 'Без cookies'],
-        help='Трябва да си влязъл в YouTube в този браузър. '
-             'За Chrome/Edge затвори браузъра преди изтегляне.',
-    )
-    cookies_upload = None
-    if cookie_source == 'Файл cookies.txt':
-        cookies_upload = st.file_uploader('cookies.txt', type=['txt'])
-    st.caption(f'yt-dlp версия: {yt_dlp.version.__version__}')
+# 4. Рендериране на термометъра
+st.markdown(f"""
+<div style="display: flex; flex-direction: column; align-items: center; margin: 30px 0; background: rgba(255,255,255,0.1); padding: 25px; border-radius: 15px; backdrop-filter: blur(5px); box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2);">
+    <h3 style="color: white; margin-bottom: 20px;">Графичен Термометър със Скала</h3>
+    <div style="display: flex; align-items: flex-start; justify-content: center; width: 150px; height: 260px; position: relative;">
+        <div style="width: 35px; height: 250px; background: #e2e8f0; border-radius: 20px; border: 4px solid #cbd5e1; position: relative; overflow: hidden; display: flex; align-items: flex-end; z-index: 2;">
+            <div style="width: 100%; height: {percentage}%; background: {thermometer_color}; transition: height 0.6s cubic-bezier(0.1, 0.8, 0.3, 1); border-radius: 0 0 12px 12px;"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; justify-content: space-between; height: 240px; margin-left: 10px; padding-top: 5px; z-index: 2;">
+            {ticks_html}
+        </div>
+    </div>
+    <div style="color: white; font-size: 28px; font-weight: bold; margin-top: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.4);">
+        {input_temp:.1f} °{'C' if unit == 'Целзий (°C)' else 'F'}
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
+# 5. Глобален CSS
+st.markdown(f"""
+<style>
+    .stApp {{
+        background: {bg_gradient} !important;
+        transition: background 0.7s ease-in-out;
+    }}
+    
+    h1, h3, p, label, .stMarkdown, .stRadio {{
+        color: white !important;
+    }}
+    
+    div[data-testid="stRadio"] label p {{
+        color: white !important;
+    }}
 
-# ---------- Логика ----------
-def build_opts(folder, cookie_path, clients, hook):
-    opts = {
-        'outtmpl': os.path.join(folder, '%(title).150B.%(ext)s'),
-        'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-        'retries': 5,
-        'fragment_retries': 5,
-        'progress_hooks': [hook],
-    }
-    if shutil.which('node'):
-        opts['js_runtimes'] = {'node': {}}
-    if cookie_source in ('Edge', 'Chrome', 'Firefox'):
-        opts['cookiesfrombrowser'] = (cookie_source.lower(),)
-    elif cookie_path:
-        opts['cookiefile'] = cookie_path
-    if clients:
-        opts['extractor_args'] = {'youtube': {'player_client': clients}}
+    .animation-holder {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+    }}
 
-    if is_audio:
-        opts['format'] = 'bestaudio/best'
-        opts['postprocessors'] = [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': str(quality),
-        }]
-    else:
-        h = quality
-        opts['format'] = (
-            f'bv*[height<={h}][vcodec^=avc1]+ba[acodec^=mp4a]/'
-            f'bv*[height<={h}]+ba/b[height<={h}]/b'
-        )
-        opts['merge_output_format'] = 'mp4'
-    return opts
+    .falling-emoji {{
+        position: absolute;
+        top: -50px;
+        font-size: 32px;
+        animation: fly {speed} linear infinite;
+        animation-direction: {direction};
+    }}
 
+    @keyframes fly {{
+        0% {{
+            transform: translateY(-50px) rotate(0deg);
+            opacity: 1;
+        }}
+        100% {{
+            transform: translateY(105vh) rotate(360deg);
+            opacity: 0.1;
+        }}
+    }}
+    
+    .e1 {{ left: 8%; animation-delay: 0s; }}
+    .e2 {{ left: 23%; animation-delay: 2.5s; font-size: 22px; }}
+    .e3 {{ left: 38%; animation-delay: 4.5s; font-size: 38px; }}
+    .e4 {{ left: 53%; animation-delay: 1.2s; }}
+    .e5 {{ left: 68%; animation-delay: 5.2s; font-size: 24px; }}
+    .e6 {{ left: 83%; animation-delay: 3.2s; font-size: 42px; }}
+</style>
 
-def download_one(url, folder, cookie_path, bar, label):
-    def hook(d):
-        if d['status'] == 'downloading':
-            total = d.get('total_bytes') or d.get('total_bytes_estimate')
-            if total:
-                pct = min(d['downloaded_bytes'] / total, 1.0)
-                speed = d.get('speed') or 0
-                bar.progress(pct, text=f'{label}: {pct * 100:.0f}% '
-                                       f'({speed / 1_048_576:.1f} MB/s)')
-        elif d['status'] == 'finished':
-            bar.progress(1.0, text=f'{label}: обработка...')
-
-    errors = []
-    for clients in CLIENT_SETS:
-        try:
-            started = time.time()
-            with yt_dlp.YoutubeDL(build_opts(folder, cookie_path, clients, hook)) as ydl:
-                info = ydl.extract_info(url, download=True)
-            path = None
-            try:
-                path = info['requested_downloads'][0]['filepath']
-            except Exception:
-                files = [p for p in Path(folder).glob('*') if p.stat().st_mtime >= started]
-                if files:
-                    path = str(max(files, key=lambda p: p.stat().st_mtime))
-            return info, path, errors
-        except Exception as e:
-            errors.append(f"[{', '.join(clients) if clients else 'по подразбиране'}] {e}")
-    return None, None, errors
-
-
-# ---------- Бутон ----------
-if st.button('⬇️ Свали', type='primary'):
-    urls = [u.strip() for u in urls_text.splitlines() if u.strip()]
-    if not urls:
-        st.warning('Въведи поне един линк.')
-    elif cookie_source == 'Файл cookies.txt' and cookies_upload is None:
-        st.warning('Качи cookies.txt или избери друг източник.')
-    else:
-        os.makedirs(out_dir, exist_ok=True)
-        cookie_path = None
-        if cookies_upload is not None:
-            cookie_path = os.path.join(out_dir, '.cookies_tmp.txt')
-            with open(cookie_path, 'wb') as f:
-                f.write(cookies_upload.getbuffer())
-
-        try:
-            for i, url in enumerate(urls, 1):
-                label = f'{i}/{len(urls)}'
-                bar = st.progress(0.0, text=f'{label}: стартиране...')
-                info, path, errors = download_one(url, out_dir, cookie_path, bar, label)
-                if path:
-                    bar.progress(1.0, text=f'{label}: готово ✅')
-                    c1, c2 = st.columns([1, 3])
-                    if info and info.get('thumbnail'):
-                        c1.image(info['thumbnail'])
-                    c2.success(f"**{info.get('title', os.path.basename(path))}**")
-                    c2.caption(path)
-                    st.session_state.history.append(path)
-                else:
-                    bar.progress(1.0, text=f'{label}: неуспешно ❌')
-                    st.error(f'Неуспех за: {url}')
-                    with st.expander('Подробности за грешката'):
-                        st.code('\n\n'.join(errors))
-        finally:
-            if cookie_path and os.path.exists(cookie_path):
-                os.remove(cookie_path)
-
-# ---------- Папка и история ----------
-if st.session_state.history:
-    st.divider()
-    st.subheader('Свалени в тази сесия')
-    for p in reversed(st.session_state.history):
-        st.write('•', os.path.basename(p))
-
-if os.path.isdir(out_dir) and hasattr(os, 'startfile'):
-    if st.button('📂 Отвори папката със свалените файлове'):
-        os.startfile(out_dir)
+<div class="animation-holder">
+    <div class="falling-emoji e1">{emoji}</div>
+    <div class="falling-emoji e2">{emoji}</div>
+    <div class="falling-emoji e3">{emoji}</div>
+    <div class="falling-emoji e4">{emoji}</div>
+    <div class="falling-emoji e5">{emoji}</div>
+    <div class="falling-emoji e6">{emoji}</div>
+</div>
+""", unsafe_allow_html=True)
